@@ -15,6 +15,8 @@ from time import sleep
 from pyparsing import unicode
 from tqdm import tqdm
 
+data_folder = """C:/Users/smitric/Desktop/github_projects/nova_kola/"""
+
 
 class Car:
     def __init__(self, url, brand, model, productionYear=-1, fuel='Unknown', power='Unknown', mileage_in_km=-1):
@@ -107,11 +109,8 @@ def missing_values_to_None(car_dict):
 
 
 def get_all_urls():
-    if os.path.exists('C:/Users/smitric/Desktop/github_projects/podaci_za_projekat/urls.pkl'):
-        print('Implementiraj ucitavanje pickle fajla')
-        exit()
     urls = []
-    num_of_pages = 2886 # do ovog broja sam dosao 29/03/2021 jednostavnom pretragom na sajtu
+    num_of_pages = 2494  # do ovog broja sam dosao 27/05/2021 jednostavnom pretragom na sajtu
     for page_num in tqdm(range(1, num_of_pages + 1)):
         soup = BS(urllib2.urlopen('https://www.polovniautomobili.com/auto-oglasi/pretraga?page=' + str(
             page_num) + '&sort=basic&city_distance=0&showOldNew=all&without_price=1'), features="html.parser")
@@ -126,7 +125,7 @@ def get_all_urls():
                         if 'url' in splited[0]:
                             urls.append(line[line.index(':') + 1:].replace('"', '').replace(',', '').strip())
 
-    with open('C:/Users/smitric/Desktop/github_projects/podaci_za_projekat/urls.pkl', 'wb') as f:
+    with open(os.path.join(data_folder, 'urls.pkl'), 'wb') as f:
         pickle.dump(urls, f)
 
     return urls
@@ -184,8 +183,9 @@ def basic_car_info(soup):
         for line in tag.string.split('\n'):
             if ':' in line:
                 if 'logo' not in line and 'url' not in line and 'image' not in line:
-                    dict_[line.split(":")[0].replace("\"", "").replace("@", "").strip()] = convert_unicode(line.split(":")[
-                        1].replace("\"", "").replace(",", "").strip())
+                    dict_[line.split(":")[0].replace("\"", "").replace("@", "").strip()] = convert_unicode(
+                        line.split(":")[
+                            1].replace("\"", "").replace(",", "").strip())
                 else:
                     dict_[line.split(":")[0].replace("\"", "").replace("@", "").strip()] = convert_unicode(':'.join(
                         line.split(":")[1:]).replace("\"", "").strip())
@@ -207,18 +207,22 @@ def convert_unicode(string):
     return string
 
 
-def save_cars_info(urls):
+def save_cars_info(urls, prices):
     print('Getting cars info...')
     sys.setrecursionlimit(500000)
-    for url in tqdm(urls):
+    dict_prices = dict(prices)
 
+    for url in tqdm(urls):
         soup = BS(urllib2.urlopen(url), features="html.parser")
         ch_dir, safety_extras = get_characteristics_safety_and_extras_for_soup(soup)
         car_dict = basic_car_info(soup)
 
-        data = (car_dict, ch_dir, safety_extras)
+        if url in dict_prices:
+            data = (car_dict, ch_dir, safety_extras, dict_prices[url])
+        else:
+            data = (car_dict, ch_dir, safety_extras, 'price_unknown')
 
-        with open('C:/Users/smitric/Desktop/github_projects/podaci_za_projekat/car_number_' + str(urls.index(url) + 1) + '.pkl', 'wb') as f:
+        with open(os.path.join(data_folder, 'car_number_' + str(urls.index(url) + 1)) + '.pkl', 'wb') as f:
             pickle.dump(data, f)
 
 
@@ -287,42 +291,31 @@ def vehiclesByDecades(cars):
 
 
 def main():
-    ## urls = get_all_urls()
-    ## file_path = save_cars_info(urls)
-    # load_all_setsOf25_and_merge_and_save()
-    ## cars = loadCars()
-    ## vehiclesByDecades(cars)
-    get_prices()
+    urls = get_all_urls()
+    prices = get_prices(urls)
+    save_to_file(prices, os.path.join(data_folder, 'all_url-prices.pkl'))
+    save_cars_info(urls, prices)
+
+    for i in range(1, 11):
+        print_car_info(i)
 
 
-def get_prices():
-
-    urls = get_urls_from_file()
-    import time
+def get_prices(urls):
     prices = []
-    i = 0
     for url in tqdm(urls):
         soup = BS(urllib2.urlopen(url), features="html.parser")
         price = soup.findAll('div', {'class': 'price-item position-relative'})
 
-
         for element in price:
-            prices.append((i, element.text.strip()))
-
-        if i % 10 == 0:
-            with open('C:\\Users\\smitric\\Desktop\\github_projects\\ML-UsedCarsPricePrediction\\podaci_za_projekat\\aaab_prices\\prices' + str(i) + '.pkl', 'wb') as f:
-                pickle.dump(prices, f)
-                prices = []
-
-        i = i+1
-    pass
+            prices.append((url, element.text.strip()))
+    return prices
 
 
 def get_urls_from_file():
-
     import pickle
     try:
-        f = open('C:\\Users\\smitric\\Desktop\\github_projects\\ML-UsedCarsPricePrediction\\podaci_za_projekat\\urls.pkl', 'rb')
+        f = open('C:\\Users\\smitric\\Desktop\\github_projects\\UsedCarsPricePrediction_Temp\\data\\features\\urls.pkl',
+                 'rb')
     except Exception as e:
         print('Could not find the ' + file_name + '. Returning empty dict.')
         return {}
@@ -334,19 +327,6 @@ def get_urls_from_file():
     return data
 
 
-def merge_prices():
-    prices = []
-    for i in range(0, 1150, 10):
-        with open('C:\\Users\\smitric\\Desktop\\github_projects\\ML-UsedCarsPricePrediction\\podaci_za_projekat'
-                  '\\aaab_prices\\prices' + str(i) + '.pkl', 'rb') as f:
-            data = pickle.load(f)
-            prices = prices + data
-
-    with open(
-            'C:\\Users\\smitric\\Desktop\\github_projects\\ML-UsedCarsPricePrediction\\podaci_za_projekat\\aaab_prices\\aaa_prices.pkl', 'wb') as f:
-        pickle.dump(prices, f)
-
-
 def print_prices():
     with open('C:\\Users\\smitric\\Desktop\\github_projects\\ML-UsedCarsPricePrediction\\podaci_za_projekat'
               '\\aaab_prices\\aaa_prices.pkl', 'rb') as f:
@@ -355,8 +335,11 @@ def print_prices():
         print(len(data), data[:15])
 
 
+def print_car_info(i):
+    with open(os.path.join(data_folder, 'car_number_' + str(i) + '.pkl'), 'rb') as car_file:
+        unpickled = pickle.load(car_file)
+        print(unpickled)
+
+
 if __name__ == '__main__':
-    get_prices()
-    merge_prices()
-    print_prices()
-#    main()
+    main()
